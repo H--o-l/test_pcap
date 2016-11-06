@@ -36,8 +36,9 @@ Exemple de sortie :
 Solution based on https://www.rhyous.com/2011/11/13/how-to-read-a-pcap-file-from-wireshark-with-c/
 And http://homes.di.unimi.it/~gfp/SiRe/2002-03/progetti/libpcap-tutorial.html
 
-Asumption:
-All packet are IPV4
+Assumption:
+All packets are IPV4
+
 */
 
 /* --------------------------------- Libs --------------------------------- */
@@ -89,7 +90,7 @@ struct sniff_ip {
     struct in_addr ip_src,ip_dst; /* source and dest address */
 };
 
-/* --------------------------------- Funtion inet_ntoa --------------------------------- */
+/* --------------------------------- Copy paste funtion inet_ntoa --------------------------------- */
 static char buffer[18];
 char *inet_ntoa (u_int in){
     unsigned char *bytes = (unsigned char *) &in;
@@ -97,51 +98,46 @@ char *inet_ntoa (u_int in){
     return buffer;
 }
 
-/* --------------------------------- Funtions --------------------------------- */
+/* --------------------------------- Main --------------------------------- */
 int main(int argc, char *argv[])
 {
-    // pcap handling
     char errbuff[PCAP_ERRBUF_SIZE];
     struct pcap_pkthdr *header;
     const u_char *data;
     
     // Open file
     string file;
-    if(argv[1] != NULL && (file = argv[1]) != "") {cout << "Used pcap file: " << file << endl;} else {cout << "No input file" << endl; return 0;}
+    if(argv[1] != NULL && (file = argv[1]) != "") {cout << "Use pcap file: " << file << endl;} else {cout << "No input file" << endl; return 0;}
     pcap_t * pcap = pcap_open_offline(file.c_str(), errbuff);
     
     // Loop input
     map <u_long, map<u_int, u_int> > time_map;
     while (pcap_next_ex(pcap, &header, &data) >= 0)
     { 
-        // Show Epoch Time
-        u_long    packet_time = ((u_long) header->ts.tv_sec / 10)*10;
+        u_long    packet_time = ((u_long) header->ts.tv_sec / 10)*10; // tronc time by 10sec
         u_int     packet_ip   = (((struct sniff_ip*)(data + sizeof(struct sniff_ethernet)))->ip_src.s_addr);
         u_int     packet_len  = header->len;
 
-        if(time_map.find(packet_time) == time_map.end()){
-            cout << packet_time << " " << packet_len << " " << packet_ip << endl;
-            time_map[packet_time][packet_ip] = packet_len;
-        }
-        break;
+        // Init at zero by default map constructor
+        time_map[packet_time][packet_ip] += packet_len;
     }
     
-    // loop result
+    // Loop result
     for (map<u_long, map<u_int, u_int> >::iterator iterator_time_map = time_map.begin(); iterator_time_map != time_map.end(); iterator_time_map++)
     {
         cout << endl << iterator_time_map->first << endl;
         cout << "--------------------" << endl;
         
-        // sort packet by size
-        vector<pair<int, u_int> > com_by_size;
+        // sort ip by com size
+        vector<pair<u_int, u_int> > com_by_size_vector;
         for (map<u_int, u_int>::iterator iterator_ip_map = iterator_time_map->second.begin(); iterator_ip_map != iterator_time_map->second.end(); ++iterator_ip_map){
-            com_by_size.push_back(make_pair(iterator_ip_map->second, iterator_ip_map->first));
+            com_by_size_vector.push_back(make_pair(iterator_ip_map->second, iterator_ip_map->first));
         }
-        sort(com_by_size.begin(), com_by_size.end());    
+        sort(com_by_size_vector.begin(), com_by_size_vector.end(), greater<pair<u_int, u_int> >());    
         
-        // print packet
-        for(vector<pair<int, u_int> >::iterator vector_iterator = com_by_size.begin(); vector_iterator != com_by_size.end(); vector_iterator++){
-            cout << vector_iterator->first << " " << inet_ntoa(vector_iterator->second) << endl;
+        // print
+        for(vector<pair<u_int, u_int> >::iterator iterator_com_by_size_vector = com_by_size_vector.begin(); iterator_com_by_size_vector != com_by_size_vector.end(); iterator_com_by_size_vector++){
+            cout << iterator_com_by_size_vector->first << " " << inet_ntoa(iterator_com_by_size_vector->second) << endl;
         }
     }
 }
