@@ -43,6 +43,8 @@ All packet are IPV4
 /* --------------------------------- Libs --------------------------------- */
 #include <iostream>
 #include <map>
+#include <vector>
+#include <algorithm> 
 #include <pcap.h>
 using namespace std; // shortcut
 
@@ -60,7 +62,7 @@ struct sniff_ethernet {
 
 /* Internet address. */
 struct in_addr {
-    u_int32_t       s_addr;     /* address in network byte order */
+    u_int       s_addr;     /* address in network byte order */
 };
 
 /* IP header */
@@ -89,7 +91,7 @@ struct sniff_ip {
 
 /* --------------------------------- Funtion inet_ntoa --------------------------------- */
 static char buffer[18];
-char *inet_ntoa (struct in_addr in){
+char *inet_ntoa (u_int in){
     unsigned char *bytes = (unsigned char *) &in;
     snprintf (buffer, sizeof (buffer), "%d.%d.%d.%d", bytes[0], bytes[1], bytes[2], bytes[3]);
     return buffer;
@@ -102,29 +104,44 @@ int main(int argc, char *argv[])
     char errbuff[PCAP_ERRBUF_SIZE];
     struct pcap_pkthdr *header;
     const u_char *data;
-    // IP handling
-    in_addr ip_src;    
     
     // Open file
-    string file = argv[1];
-    if(file != "") {cout << "Used pcap file: " << file << endl;} else {cout << "No input file" << endl; return 0;}
+    string file;
+    if(argv[1] != NULL && (file = argv[1]) != "") {cout << "Used pcap file: " << file << endl;} else {cout << "No input file" << endl; return 0;}
     pcap_t * pcap = pcap_open_offline(file.c_str(), errbuff);
     
-    // Loop 
-    // map <int, string> packet;
+    // Loop input
+    map <u_long, map<u_int, u_int> > time_map;
     while (pcap_next_ex(pcap, &header, &data) >= 0)
     { 
-        // Show the size in bytes of the packet
-        printf("Packet size: %d bytes\n", header->len);
-    
-        ip_src = ((struct sniff_ip*)(data + sizeof(struct sniff_ethernet)))->ip_src;
-       
-        cout << "IP src: " << ip_src.s_addr << endl;
-        cout << "IP src translated: " << inet_ntoa(ip_src) << endl;	    
-        
         // Show Epoch Time
-        printf("Epoch Time: %d seconds\n", ((int) header->ts.tv_sec / 10)*10 );
- 
-        printf("\n");
+        u_long    packet_time = ((u_long) header->ts.tv_sec / 10)*10;
+        u_int     packet_ip   = (((struct sniff_ip*)(data + sizeof(struct sniff_ethernet)))->ip_src.s_addr);
+        u_int     packet_len  = header->len;
+
+        if(time_map.find(packet_time) == time_map.end()){
+            cout << packet_time << " " << packet_len << " " << packet_ip << endl;
+            time_map[packet_time][packet_ip] = packet_len;
+        }
+        break;
+    }
+    
+    // loop result
+    for (map<u_long, map<u_int, u_int> >::iterator iterator_time_map = time_map.begin(); iterator_time_map != time_map.end(); iterator_time_map++)
+    {
+        cout << endl << iterator_time_map->first << endl;
+        cout << "--------------------" << endl;
+        
+        // sort packet by size
+        vector<pair<int, u_int> > com_by_size;
+        for (map<u_int, u_int>::iterator iterator_ip_map = iterator_time_map->second.begin(); iterator_ip_map != iterator_time_map->second.end(); ++iterator_ip_map){
+            com_by_size.push_back(make_pair(iterator_ip_map->second, iterator_ip_map->first));
+        }
+        sort(com_by_size.begin(), com_by_size.end());    
+        
+        // print packet
+        for(vector<pair<int, u_int> >::iterator vector_iterator = com_by_size.begin(); vector_iterator != com_by_size.end(); vector_iterator++){
+            cout << vector_iterator->first << " " << inet_ntoa(vector_iterator->second) << endl;
+        }
     }
 }
